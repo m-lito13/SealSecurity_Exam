@@ -1,0 +1,14 @@
+{
+  "name": "seal-security-exam",
+  "version": "1.0.0",
+  "description": "Seal Security Exam",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Michael L",
+  "license": "ISC",
+  "dependencies": {
+    "tough-cookie": "^2.5.0"
+  }
+}
