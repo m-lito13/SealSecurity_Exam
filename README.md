@@ -1,2 +1,4 @@
 # SealSecurity_Exam
-Fix prototype pollution vulnerability (CVE-2023-26136) for tough-cookie package
+Prototype pollution is a JavaScript vulnerability that enables an attacker to 
+add arbitrary properties to global object prototypes, which may then be inherited by user-defined objects.
+
