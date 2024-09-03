@@ -1,0 +1,136 @@
+diff --git a/lib/memstore.js b/lib/memstore.js
+index d2b915c..59e42cc 100644
+--- a/lib/memstore.js
++++ b/lib/memstore.js
+@@ -36,7 +36,7 @@ var util = require('util');
+ 
+ function MemoryCookieStore() {
+   Store.call(this);
+-  this.idx = {};
++  this.idx = Object.create(null);
+ }
+ util.inherits(MemoryCookieStore, Store);
+ exports.MemoryCookieStore = MemoryCookieStore;
+@@ -115,10 +115,10 @@ MemoryCookieStore.prototype.findCookies = function(domain, path, cb) {
+ 
+ MemoryCookieStore.prototype.putCookie = function(cookie, cb) {
+   if (!this.idx[cookie.domain]) {
+-    this.idx[cookie.domain] = {};
++    this.idx[cookie.domain] = Object.create(null);
+   }
+   if (!this.idx[cookie.domain][cookie.path]) {
+-    this.idx[cookie.domain][cookie.path] = {};
++    this.idx[cookie.domain][cookie.path] = Object.create(null);
+   }
+   this.idx[cookie.domain][cookie.path][cookie.key] = cookie;
+   cb(null);
+@@ -150,9 +150,9 @@ MemoryCookieStore.prototype.removeCookies = function(domain, path, cb) {
+ };
+ 
+ MemoryCookieStore.prototype.removeAllCookies = function(cb) {
+-  this.idx = {};
++  this.idx = Object.create(null);
+   return cb(null);
+-}
++};
+ 
+ MemoryCookieStore.prototype.getAllCookies = function(cb) {
+   var cookies = [];
+diff --git a/test/memstore_vulnerability_fix_test.js b/test/memstore_vulnerability_fix_test.js
+new file mode 100644
+index 0000000..12866ca
+--- /dev/null
++++ b/test/memstore_vulnerability_fix_test.js
+@@ -0,0 +1,92 @@
++/*!
++ * Copyright (c) 2015, Salesforce.com, Inc.
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright notice,
++ * this list of conditions and the following disclaimer.
++ *
++ * 2. Redistributions in binary form must reproduce the above copyright notice,
++ * this list of conditions and the following disclaimer in the documentation
++ * and/or other materials provided with the distribution.
++ *
++ * 3. Neither the name of Salesforce.com nor the names of its contributors may
++ * be used to endorse or promote products derived from this software without
++ * specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++'use strict';
++var vows = require('vows');
++var assert = require('assert');
++var async = require('async');
++var tough = require('../lib/cookie');
++var Cookie = tough.Cookie;
++var CookieJar = tough.CookieJar;
++var MemoryCookieStore = tough.MemoryCookieStore;
++
++var atNow = Date.now();
++
++function at(offset) {
++    return {now: new Date(atNow + offset)};
++}
++
++vows
++        .describe('memstore')
++        .addBatch({
++            "Init memstore": function () {
++                var ms = new MemoryCookieStore();
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does no exists');
++                var protoExists = ('__proto__' in ms.idx);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .addBatch({
++            "Memstore putCookie": function () {
++                var ms = new MemoryCookieStore();
++                var c = new Cookie();
++                c.domain = 'tempdomain';
++                c.path = 'temppath';
++                var tempCb = function() { 
++                    
++                };
++                ms.putCookie(c, tempCb);
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does not exists');
++                var domainPropExists = (c.domain in ms.idx);
++                assert.isTrue(domainPropExists, 'domain property does not exist');
++                var protoExists = ('__proto__' in ms.idx[c.domain]);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++                var pathPropExists = (c.path in ms.idx[c.domain]);
++                assert.isTrue(pathPropExists, 'path property does not exist');
++                var protoExists = ('__proto__' in ms.idx[c.domain][c.path]);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .addBatch({
++            "Memstore removeAllCookies": function () {
++                var ms = new MemoryCookieStore();
++                var tempCb = function() { 
++                    
++                };
++                ms.removeAllCookies(tempCb);
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does no exists');
++                var protoExists = ('__proto__' in ms.idx);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .export(module);
