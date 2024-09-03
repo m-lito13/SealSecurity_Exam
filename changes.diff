@@ -1,5 +1,5 @@
 diff --git a/lib/memstore.js b/lib/memstore.js
-index d2b915c..6b0a0b1 100644
+index d2b915c..59e42cc 100644
 --- a/lib/memstore.js
 +++ b/lib/memstore.js
 @@ -36,7 +36,7 @@ var util = require('util');
@@ -24,12 +24,237 @@ index d2b915c..6b0a0b1 100644
    }
    this.idx[cookie.domain][cookie.path][cookie.key] = cookie;
    cb(null);
-@@ -150,7 +150,7 @@ MemoryCookieStore.prototype.removeCookies = function(domain, path, cb) {
+@@ -150,9 +150,9 @@ MemoryCookieStore.prototype.removeCookies = function(domain, path, cb) {
  };
  
  MemoryCookieStore.prototype.removeAllCookies = function(cb) {
 -  this.idx = {};
 +  this.idx = Object.create(null);
    return cb(null);
- }
+-}
++};
  
+ MemoryCookieStore.prototype.getAllCookies = function(cb) {
+   var cookies = [];
+diff --git a/test/memstore_vulnerability_fix_test.js b/test/memstore_vulnerability_fix_test.js
+new file mode 100644
+index 0000000..a0bd43a
+--- /dev/null
++++ b/test/memstore_vulnerability_fix_test.js
+@@ -0,0 +1,216 @@
++/*!
++ * Copyright (c) 2015, Salesforce.com, Inc.
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright notice,
++ * this list of conditions and the following disclaimer.
++ *
++ * 2. Redistributions in binary form must reproduce the above copyright notice,
++ * this list of conditions and the following disclaimer in the documentation
++ * and/or other materials provided with the distribution.
++ *
++ * 3. Neither the name of Salesforce.com nor the names of its contributors may
++ * be used to endorse or promote products derived from this software without
++ * specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++'use strict';
++var vows = require('vows');
++var assert = require('assert');
++var async = require('async');
++var tough = require('../lib/cookie');
++var Cookie = tough.Cookie;
++var CookieJar = tough.CookieJar;
++var MemoryCookieStore = tough.MemoryCookieStore;
++
++var atNow = Date.now();
++
++function at(offset) {
++    return {now: new Date(atNow + offset)};
++}
++
++vows
++        .describe('memstore')
++        .addBatch({
++            "Init memstore": function () {
++                var ms = new MemoryCookieStore();
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does no exists');
++                var protoExists = ('__proto__' in ms.idx);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .addBatch({
++            "Memstore putCookie": function () {
++                var ms = new MemoryCookieStore();
++                var c = new Cookie();
++                c.domain = 'tempdomain';
++                c.path = 'temppath';
++                var tempCb = function() { 
++                    
++                };
++                ms.putCookie(c, tempCb);
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does not exists');
++                var domainPropExists = (c.domain in ms.idx);
++                assert.isTrue(domainPropExists, 'domain property does not exist');
++                var protoExists = ('__proto__' in ms.idx[c.domain]);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++                var pathPropExists = (c.path in ms.idx[c.domain]);
++                assert.isTrue(pathPropExists, 'path property does not exist');
++                var protoExists = ('__proto__' in ms.idx[c.domain][c.path]);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .addBatch({
++            "Memstore removeAllCookies": function () {
++                var ms = new MemoryCookieStore();
++                var tempCb = function() { 
++                    
++                };
++                ms.removeAllCookies(tempCb);
++                var idxExists = ('idx' in ms);
++                assert.isTrue(idxExists, 'idx property does no exists');
++                var protoExists = ('__proto__' in ms.idx);
++                assert.isFalse(protoExists, '__proto__  exists but expected no');
++            }
++        })
++        .addBatch({
++            "Setting a no-path cookie": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=example.com");
++                    assert.strictEqual(c.hostOnly, null);
++                    assert.instanceOf(c.creation, Date);
++                    assert.strictEqual(c.lastAccessed, null);
++                    c.creation = new Date(Date.now() - 10000);
++                    cj.setCookie(c, 'http://example.com/index.html', this.callback);
++                },
++                "domain": function (c) {
++                    assert.equal(c.domain, 'example.com')
++                },
++                "path is /": function (c) {
++                    assert.equal(c.path, '/');
++                },
++                "path was derived": function (c) {
++                    assert.strictEqual(c.pathIsDefault, true)
++                }
++            },
++            "Setting a cookie already marked as host-only": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=example.com");
++                    assert.strictEqual(c.hostOnly, null);
++                    assert.instanceOf(c.creation, Date);
++                    assert.strictEqual(c.lastAccessed, null);
++                    c.creation = new Date(Date.now() - 10000);
++                    c.hostOnly = true;
++                    cj.setCookie(c, 'http://example.com/index.html', this.callback);
++                },
++                "domain": function (c) {
++                    assert.equal(c.domain, 'example.com')
++                },
++                "still hostOnly": function (c) {
++                    assert.strictEqual(c.hostOnly, true)
++                }
++            },
++            "Setting a session cookie": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b");
++                    assert.strictEqual(c.path, null);
++                    cj.setCookie(c, 'http://www.example.com/dir/index.html', this.callback);
++                },
++                "works": function (c) {
++                    assert.instanceOf(c, Cookie)
++                },
++                "gets the domain": function (c) {
++                    assert.equal(c.domain, 'www.example.com')
++                },
++                "gets the default path": function (c) {
++                    assert.equal(c.path, '/dir')
++                },
++                "is 'hostOnly'": function (c) {
++                    assert.ok(c.hostOnly)
++                }
++            },
++            "Setting wrong domain cookie": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=fooxample.com; Path=/");
++                    cj.setCookie(c, 'http://example.com/index.html', this.callback);
++                },
++                "fails": function (err, c) {
++                    assert.ok(err.message.match(/domain/i));
++                    assert.ok(!c);
++                }
++            },
++            "Setting sub-domain cookie": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=www.example.com; Path=/");
++                    cj.setCookie(c, 'http://example.com/index.html', this.callback);
++                },
++                "fails": function (err, c) {
++                    assert.ok(err.message.match(/domain/i));
++                    assert.ok(!c);
++                }
++            },
++            "Setting super-domain cookie": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=example.com; Path=/");
++                    cj.setCookie(c, 'http://www.app.example.com/index.html', this.callback);
++                },
++                "success": function (err, c) {
++                    assert.ok(!err);
++                    assert.equal(c.domain, 'example.com');
++                }
++            },
++            "Setting a sub-path cookie on a super-domain": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=example.com; Path=/subpath");
++                    assert.strictEqual(c.hostOnly, null);
++                    assert.instanceOf(c.creation, Date);
++                    assert.strictEqual(c.lastAccessed, null);
++                    c.creation = new Date(Date.now() - 10000);
++                    cj.setCookie(c, 'http://www.example.com/index.html', this.callback);
++                },
++                "domain is super-domain": function (c) {
++                    assert.equal(c.domain, 'example.com')
++                },
++                "path is /subpath": function (c) {
++                    assert.equal(c.path, '/subpath')
++                },
++                "path was NOT derived": function (c) {
++                    assert.strictEqual(c.pathIsDefault, null)
++                }
++            },
++            "Setting HttpOnly cookie over non-HTTP API": {
++                topic: function () {
++                    var cj = new CookieJar();
++                    var c = Cookie.parse("a=b; Domain=example.com; Path=/; HttpOnly");
++                    cj.setCookie(c, 'http://example.com/index.html', {http: false}, this.callback);
++                },
++                "fails": function (err, c) {
++                    assert.match(err.message, /HttpOnly/i);
++                    assert.ok(!c);
++                }
++            }
++        })
++        .export(module);
