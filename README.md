@@ -35,5 +35,30 @@ console.log(mc.P2); //value2
 After changing `__proto__` - all created instances of myClass will have property P2
 
 For tough-cookies package ( v2.5.0 ) this prototype pollution vulnerability can be seen from code snippet :  
+```
+await new Promise((resolve, reject) => {
+            cookiejar.setCookie(
+                "Slonser=polluted; Domain=__proto__; Path=/notauth",
+                "https://__proto__/admin",
+                { loose: true },
+                (err, cookie) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(cookie);
+                    }
+                }
+            );
+        });
+```
 
-
+It was found that CookieJar class uses `MemoryCookieStore` as store by default. And in several methods of `MemoryCookieStore` objects initialized like following 
+```
+this.idx = {}; 
+```
+This means that for this.idx prototype can be added properties with values(which can be problematic values)  via `__proto__` . To prevent this - in several places there was changed initialization as following : 
+```
+this.idx = Object.create(null);
+```
+This is creates empty object without prototype.There was added test 
+memstore_vulnerability_fix_test.js  verifying the fix
