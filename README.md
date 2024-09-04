@@ -19,6 +19,21 @@ At some point, the recursive merge operation may assign the value of evilPropert
 `targetObject.__proto__.badProperty = 'payload';`
 
 `__proto__` has special usage in JavaScript. As we know , if for some object some property P1 was not found, it will be searched in the prototype of this object
+
 Example
+```
+function myClass() { 
+  this.P1 = 'value';
+} 
+let mc = new myClass();
+console.log(mc.P1); //Value 
+console.log(mc.P2); //Undefined
+mc.__proto__.P2 = 'value2';
+let mc2 = new myClass();
+console.log(mc.P2); //value2
+```
+After changing `__proto__` - all created instances of myClass will have property P2
+
+For tough-cookies package ( v2.5.0 ) this prototype pollution vulnerability can be seen from code snippet :  
 
 
